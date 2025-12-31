@@ -1,0 +1,15 @@
+.DS_Store
+/.build
+/Packages
+/DerivedData
+.swiftpm/
+!/.swiftpm/configuration/
+xcuserdata/
+$RECYCLE.BIN/
+*.orig
+*.swp
+*~
+.precompile
+.netrc
+.claude/
+
