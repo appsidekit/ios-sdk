@@ -12,6 +12,9 @@ import SwiftUI
 public final class SideKit: ObservableObject {
     @Published public var showUpdateScreen = false
     @Published public var gateInformation: GateInformation?
+    @Published public var isAnalyticsEnabled: Bool = true {
+        didSet { settings.isAnalyticsEnabled = isAnalyticsEnabled }
+    }
     private var presentationMode: UpdatePresentationMode = .automatic
     
     public enum UpdatePresentationMode {
@@ -46,6 +49,7 @@ public final class SideKit: ObservableObject {
     init(settings: SettingsStoreProtocol = SettingsStore(), analyticsAgent: AnalyticsAgentProtocol? = nil) {
         self.settings = settings
         self.analyticsAgent = analyticsAgent
+        self.isAnalyticsEnabled = settings.isAnalyticsEnabled
     }
     
     /// Entry point for the SDK. Call this as early as possible in your app's lifecycle.
@@ -271,15 +275,6 @@ public final class SideKit: ObservableObject {
         agent.sendSignal(signals: signals)
     }
         
-    /// Enable or disable analytics collection.
-    public func setAnalyticsEnabled(_ enabled: Bool) {
-        settings.isAnalyticsEnabled = enabled
-    }
-    
-    /// Returns whether analytics is currently enabled.
-    public var isAnalyticsEnabled: Bool {
-        settings.isAnalyticsEnabled
-    }
 }
 
 // MARK: - Logging

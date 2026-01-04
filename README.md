@@ -65,6 +65,28 @@ SideKit.shared.sendSignal("user_signed_up")
 SideKit.shared.sendSignal(key: "purchase", value: "pro_plan")
 ```
 
+### 4. Analytics Opt-Out
+
+Allow users to control analytics collection. If it's turned off you will no longer have signal data from users with analytics disabled. Version gating will be uninterrupted.
+
+```swift
+struct SettingsView: View {
+    @ObservedObject var sideKit = SideKit.shared
+
+    var body: some View {
+        Toggle("Enable Analytics", isOn: $sideKit.isAnalyticsEnabled)
+    }
+}
+```
+
+Or set it programmatically:
+
+```swift
+SideKit.shared.isAnalyticsEnabled = false
+```
+
+The preference is automatically persisted across app launches.
+
 ## Requirements
 
 - iOS 15.0+ / macOS 15.0+
