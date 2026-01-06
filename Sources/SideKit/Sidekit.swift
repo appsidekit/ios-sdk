@@ -135,25 +135,22 @@ public final class SideKit: ObservableObject {
 
     /// Checks if the current version is compliant with the gate information.
     private func checkVersionCompliance() async {
+        let previousGateUpdate = settings.cachedGateInformation?.lastGateUpdate
+
         guard let gateInfo = await fetchGateInformation() else {
             return
         }
-        
+
         guard let currentVersion = Bundle.main.appVersion else {
             return
         }
-        
+
         // Check if current version is blocked and get the specific gate type
         let blockingGateType = gateInfo.blockingGateType(currentVersion: currentVersion)
         let isBlocked = blockingGateType != nil
-        
-        // Check if we've seen this gate before (same lastGateUpdate)
-        let cachedGateInfo = settings.cachedGateInformation
-        let cachedLastGateUpdate = cachedGateInfo?.lastGateUpdate
-        let isNewGate = cachedLastGateUpdate != gateInfo.lastGateUpdate
-        
-        // If it's not a new gate, not blocked, or the blocking gate is dismissable, we might skip
-        // But we need to check: if blocked and forced, always show; if blocked and dismissable and not new, skip
+
+        let isNewGate = previousGateUpdate != gateInfo.lastGateUpdate
+
         if isBlocked {
             // If it's not a new gate and the blocking gate is dismissable, we've already shown it - skip
             if !isNewGate && blockingGateType != .forced {
@@ -175,7 +172,7 @@ public final class SideKit: ObservableObject {
             SKLog("blockedVersions: \(blockedVersionStrings.joined(separator: ", "))")
         }
         if isNewGate {
-            SKLog("New gate detected (lastGateUpdate changed from \(cachedLastGateUpdate ?? "nil") to \(gateInfo.lastGateUpdate))")
+            SKLog("New gate detected (lastGateUpdate changed from \(previousGateUpdate ?? "nil") to \(gateInfo.lastGateUpdate))")
         }
         
         sendSignal(key: DefaultSignals.gateEnforced, value: currentVersion.description)
