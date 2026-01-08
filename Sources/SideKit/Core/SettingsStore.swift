@@ -30,7 +30,7 @@ final class SettingsStore: ObservableObject, SettingsStoreProtocol {
         
         defaults.register(defaults: [
             Keys.analyticsEnabled: true,
-            Keys.firstLaunch: true,
+            Keys.firstLaunch: false,
         ])
         
         cancellable = NotificationCenter.default
