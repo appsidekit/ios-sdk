@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import Combine
 
 protocol SettingsStoreProtocol: AnyObject {
     var isAnalyticsEnabled: Bool { get set }
@@ -14,44 +13,33 @@ protocol SettingsStoreProtocol: AnyObject {
     var cachedGateInformation: GateInformation? { get set }
 }
 
-final class SettingsStore: ObservableObject, SettingsStoreProtocol {
+final class SettingsStore: SettingsStoreProtocol {
     private enum Keys {
-        static let analyticsEnabled = "analytics_enabled"
-        static let firstLaunch = "first_launch"
-        static let cachedGateInformation = "cached_gate_information"
+        static let analyticsEnabled = "sk_analytics_enabled"
+        static let firstLaunch = "sk_first_launch"
+        static let cachedGateInformation = "sk_cached_gate_information"
     }
 
-    private let cancellable: Cancellable
     private let defaults: UserDefaults
-    let objectWillChange = PassthroughSubject<Void, Never>()
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        
         defaults.register(defaults: [
             Keys.analyticsEnabled: true,
             Keys.firstLaunch: true,
         ])
-        
-        cancellable = NotificationCenter.default
-                    .publisher(for: UserDefaults.didChangeNotification)
-                    .map { _ in () }
-                    .subscribe(objectWillChange)
-        
     }
-    
-    
+
     var isAnalyticsEnabled: Bool {
-        set { defaults.set(newValue, forKey: Keys.analyticsEnabled) }
         get { defaults.bool(forKey: Keys.analyticsEnabled) }
+        set { defaults.set(newValue, forKey: Keys.analyticsEnabled) }
     }
-    
+
     var isFirstLaunch: Bool {
-        set { defaults.set(newValue, forKey: Keys.firstLaunch) }
         get { defaults.bool(forKey: Keys.firstLaunch) }
+        set { defaults.set(newValue, forKey: Keys.firstLaunch) }
     }
-    
-    /// Stores the entire GateInformation as JSON-encoded data
+
     var cachedGateInformation: GateInformation? {
         get {
             guard let data = defaults.data(forKey: Keys.cachedGateInformation),
