@@ -1,4 +1,7 @@
 # SideKit iOS SDK
+<p align="center">
+  <img src="https://appsidekit.com/app-icon.png" width="300" />
+</p>
 
 [![Swift](https://img.shields.io/badge/Swift-6.0-orange.svg?style=flat)](https://developer.apple.com/swift/)
 [![Platforms](https://img.shields.io/badge/Platforms-iOS%20%7C%20macOS-blue.svg?style=flat)](https://developer.apple.com/ios/)
