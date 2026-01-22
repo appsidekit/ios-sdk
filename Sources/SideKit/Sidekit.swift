@@ -118,17 +118,28 @@ public final class SideKit: ObservableObject {
         return nil
     }
     
-    /// Caches gate information to settings store
+    /// Caches gate information to settings store with current app version
     private func cacheGateInformation(_ gateInfo: GateInformation) {
-        settings.cachedGateInformation = gateInfo
-        SKLog("Cached gate info - latestVersion: \(gateInfo.latestVersion ?? "nil"), whatsNew: \(gateInfo.whatsNew ?? "nil"), lastGateUpdate: \(gateInfo.lastGateUpdate)")
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let gateInfoWithVersion = gateInfo.withCachedAppVersion(appVersion)
+        settings.cachedGateInformation = gateInfoWithVersion
+        SKLog("Cached gate info for app version \(appVersion) - latestVersion: \(gateInfo.latestVersion ?? "nil"), whatsNew: \(gateInfo.whatsNew ?? "nil"), lastGateUpdate: \(gateInfo.lastGateUpdate)")
     }
-    
-    /// Loads gate information from cached settings
+
+    /// Loads gate information from cached settings if it matches current app version
     private func loadCachedGateInformation() -> GateInformation? {
         guard let cachedGateInfo = settings.cachedGateInformation else {
             return nil
         }
+
+        // Validate cache is for current app version
+        let currentAppVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        if let cachedVersion = cachedGateInfo.cachedForAppVersion, cachedVersion != currentAppVersion {
+            SKLog("Cache invalidated - cached for version \(cachedVersion) but current version is \(currentAppVersion)")
+            settings.cachedGateInformation = nil
+            return nil
+        }
+
         SKLog("Loaded cached gate info - latestVersion: \(cachedGateInfo.latestVersion ?? "nil"), whatsNew: \(cachedGateInfo.whatsNew ?? "nil"), lastGateUpdate: \(cachedGateInfo.lastGateUpdate)")
         return cachedGateInfo
     }

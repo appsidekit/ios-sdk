@@ -29,13 +29,16 @@ public struct GateInformation: Codable {
     public let whatsNew: String?
     /// App Store URL for this app
     public let storeUrl: String?
+    /// The app version this gate info was fetched for (used for cache validation)
+    public let cachedForAppVersion: String?
 
-    public init(gateType: VersionGateType, lastGateUpdate: String, latestVersion: String?, whatsNew: String?, storeUrl: String?) {
+    public init(gateType: VersionGateType, lastGateUpdate: String, latestVersion: String?, whatsNew: String?, storeUrl: String?, cachedForAppVersion: String? = nil) {
         self.gateType = gateType
         self.lastGateUpdate = lastGateUpdate
         self.latestVersion = latestVersion
         self.whatsNew = whatsNew
         self.storeUrl = storeUrl
+        self.cachedForAppVersion = cachedForAppVersion
     }
 
     public init(from decoder: Decoder) throws {
@@ -53,6 +56,7 @@ public struct GateInformation: Codable {
         latestVersion = try? container.decode(String.self, forKey: .latestVersion)
         whatsNew = try? container.decode(String.self, forKey: .whatsNew)
         storeUrl = try? container.decode(String.self, forKey: .storeUrl)
+        cachedForAppVersion = try? container.decode(String.self, forKey: .cachedForAppVersion)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -61,6 +65,19 @@ public struct GateInformation: Codable {
         case latestVersion
         case whatsNew
         case storeUrl
+        case cachedForAppVersion
+    }
+
+    /// Returns a copy with the cachedForAppVersion set
+    public func withCachedAppVersion(_ appVersion: String) -> GateInformation {
+        return GateInformation(
+            gateType: gateType,
+            lastGateUpdate: lastGateUpdate,
+            latestVersion: latestVersion,
+            whatsNew: whatsNew,
+            storeUrl: storeUrl,
+            cachedForAppVersion: appVersion
+        )
     }
 
     /// Returns the blocking gate type, or nil if not blocked (i.e., gate type is live)
