@@ -267,4 +267,46 @@ struct GateInformationDecodingTests {
 
         #expect(gateInfo.gateType == .live) // Falls back to live
     }
+
+    @Test("Handles gate type as wrong type (string instead of int)")
+    func handlesGateTypeWrongType() throws {
+        let json = """
+        {
+            "gateType": "forced",
+            "lastGateUpdate": "2025-01-01T00:00:00Z"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let gateInfo = try JSONDecoder().decode(GateInformation.self, from: data)
+
+        #expect(gateInfo.gateType == .live) // Falls back to live when type mismatch
+    }
+
+    @Test("Handles null gate type")
+    func handlesNullGateType() throws {
+        let json = """
+        {
+            "gateType": null,
+            "lastGateUpdate": "2025-01-01T00:00:00Z"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let gateInfo = try JSONDecoder().decode(GateInformation.self, from: data)
+
+        #expect(gateInfo.gateType == .live) // Falls back to live when null
+    }
+
+    @Test("Handles negative gate type value")
+    func handlesNegativeGateType() throws {
+        let json = """
+        {
+            "gateType": -1,
+            "lastGateUpdate": "2025-01-01T00:00:00Z"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let gateInfo = try JSONDecoder().decode(GateInformation.self, from: data)
+
+        #expect(gateInfo.gateType == .live) // Falls back to live for negative values
+    }
 }
