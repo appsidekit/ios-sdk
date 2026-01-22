@@ -134,6 +134,7 @@ public final class SideKit: ObservableObject {
     }
 
     /// Checks if the current version is compliant with the gate information.
+    /// The server handles version comparison and returns the appropriate gate type directly.
     private func checkVersionCompliance() async {
         let previousGateUpdate = settings.cachedGateInformation?.lastGateUpdate
 
@@ -141,12 +142,8 @@ public final class SideKit: ObservableObject {
             return
         }
 
-        guard let currentVersion = Bundle.main.appVersion else {
-            return
-        }
-
-        // Check if current version is blocked and get the specific gate type
-        let blockingGateType = gateInfo.blockingGateType(currentVersion: currentVersion)
+        // Check if current version is blocked (server determined)
+        let blockingGateType = gateInfo.blockingGateType()
         let isBlocked = blockingGateType != nil
 
         let isNewGate = previousGateUpdate != gateInfo.lastGateUpdate
@@ -161,25 +158,20 @@ public final class SideKit: ObservableObject {
             // Not blocked, nothing to show
             return
         }
-        
+
         // For forced gates, always show regardless of whether we've seen it before
         // For new gates (different lastGateUpdate), always show
-        if let minVersion = gateInfo.minVersion?.version {
-            SKLog("currentVersion: \(currentVersion); minVersion: \(minVersion)")
-        }
-        if !gateInfo.blockedVersions.isEmpty {
-            let blockedVersionStrings = gateInfo.blockedVersions.map { $0.version }
-            SKLog("blockedVersions: \(blockedVersionStrings.joined(separator: ", "))")
-        }
+        SKLog("Gate type: \(gateInfo.gateType)")
         if isNewGate {
             SKLog("New gate detected (lastGateUpdate changed from \(previousGateUpdate ?? "nil") to \(gateInfo.lastGateUpdate))")
         }
-        
-        sendSignal(key: DefaultSignals.gateEnforced, value: currentVersion.description)
-        
+
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        sendSignal(key: DefaultSignals.gateEnforced, value: appVersion)
+
         showUpdateScreen = true
-        
-        // Use the specific gate type that's blocking, not the general isDismissable
+
+        // Use the specific gate type that's blocking
         let isDismissable = blockingGateType != .forced
         processAutomaticPresentation(isDismissable: isDismissable)
     }

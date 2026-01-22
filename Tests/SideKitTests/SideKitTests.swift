@@ -14,11 +14,11 @@ final class MockAnalyticsAgent: AnalyticsAgentProtocol {
     var sendSignalCallCount = 0
     var lastSentSignals: [SideKit.Signal]?
     var gateInformationToReturn: GateInformation?
-    
+
     func getGateInformation() async -> GateInformation? {
         return gateInformationToReturn
     }
-    
+
     func sendSignal(signals: [SideKit.Signal]) {
         sendSignalCallCount += 1
         lastSentSignals = signals
@@ -31,243 +31,240 @@ final class MockSettingsStore: SettingsStoreProtocol {
     var isAnalyticsEnabled: Bool
     var isFirstLaunch: Bool = true
     var cachedGateInformation: GateInformation?
-    
+
     init(analyticsEnabled: Bool) {
         self.isAnalyticsEnabled = analyticsEnabled
     }
 }
 
-// MARK: - Tests
+// MARK: - Analytics Tests
 
 @Suite("SideKit Analytics Tests")
 struct SideKitAnalyticsTests {
-    
+
     @Test("Signal is sent when analytics is enabled")
     @MainActor
     func signalSentWhenAnalyticsEnabled() async {
         let mockAgent = MockAnalyticsAgent()
         let mockSettings = MockSettingsStore(analyticsEnabled: true)
         let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
-        
+
         sideKit.sendSignal(key: "test_event", value: "test_value")
-        
+
         #expect(mockAgent.sendSignalCallCount == 1)
         #expect(mockAgent.lastSentSignals == [SideKit.Signal(name: "test_event", value: "test_value")])
     }
-    
+
     @Test("Signal is NOT sent when analytics is disabled")
     @MainActor
     func signalNotSentWhenAnalyticsDisabled() async {
         let mockAgent = MockAnalyticsAgent()
         let mockSettings = MockSettingsStore(analyticsEnabled: false)
         let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
-        
+
         sideKit.sendSignal(key: "test_event", value: "test_value")
-        
+
         #expect(mockAgent.sendSignalCallCount == 0)
         #expect(mockAgent.lastSentSignals == nil)
     }
-    
+
     @Test("Signal respects analytics toggle change")
     @MainActor
     func signalRespectsAnalyticsToggle() async {
         let mockAgent = MockAnalyticsAgent()
         let mockSettings = MockSettingsStore(analyticsEnabled: true)
         let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
-        
+
         // First signal with analytics enabled
         sideKit.sendSignal("event1")
         #expect(mockAgent.sendSignalCallCount == 1)
-        
+
         // Disable analytics
-        sideKit.setAnalyticsEnabled(false)
-        
+        sideKit.isAnalyticsEnabled = false
+
         // Second signal should not be sent
         sideKit.sendSignal("event2")
         #expect(mockAgent.sendSignalCallCount == 1) // Still 1, not incremented
     }
 }
 
-@Suite("Semantic Version Tests")
-struct SemanticVersionTests {
-    
-    @Test("Version parsing")
-    func versionParsing() {
-        let v1 = SemanticVersion(string: "1.2.3")
-        #expect(v1?.components == [1, 2, 3])
-        
-        let v2 = SemanticVersion(string: "2.0")
-        #expect(v2?.components == [2, 0])
-        
-        let v3 = SemanticVersion(string: "5")
-        #expect(v3?.components == [5])
-        
-        let v4 = SemanticVersion(string: "1.2.3.4.5")
-        #expect(v4?.components == [1, 2, 3, 4, 5])
+// MARK: - Gate Information Tests
+
+@Suite("Gate Information Tests")
+struct GateInformationTests {
+
+    @Test("Live gate type is not blocked")
+    func liveGateNotBlocked() {
+        let gateInfo = GateInformation(
+            gateType: .live,
+            lastGateUpdate: "2025-01-01T00:00:00Z",
+            latestVersion: "2.0.0",
+            whatsNew: "Bug fixes",
+            storeUrl: "https://apps.apple.com/app/id123"
+        )
+
+        #expect(gateInfo.isBlocked() == false)
+        #expect(gateInfo.blockingGateType() == nil)
+        #expect(gateInfo.isDismissable == false)
+        #expect(gateInfo.isForced == false)
     }
-    
-    @Test("Version comparison - less than")
-    func versionLessThan() {
-        let v1_0_0 = SemanticVersion(string: "1.0.0")!
-        let v1_0_1 = SemanticVersion(string: "1.0.1")!
-        let v1_1_0 = SemanticVersion(string: "1.1.0")!
-        let v2_0_0 = SemanticVersion(string: "2.0.0")!
-        
-        #expect(v1_0_0 < v1_0_1)
-        #expect(v1_0_0 < v1_1_0)
-        #expect(v1_0_0 < v2_0_0)
-        #expect(v1_0_1 < v1_1_0)
-        #expect(v1_1_0 < v2_0_0)
+
+    @Test("Forced gate type is blocked and not dismissable")
+    func forcedGateBlocked() {
+        let gateInfo = GateInformation(
+            gateType: .forced,
+            lastGateUpdate: "2025-01-01T00:00:00Z",
+            latestVersion: "2.0.0",
+            whatsNew: "Critical security update",
+            storeUrl: "https://apps.apple.com/app/id123"
+        )
+
+        #expect(gateInfo.isBlocked() == true)
+        #expect(gateInfo.blockingGateType() == .forced)
+        #expect(gateInfo.isDismissable == false)
+        #expect(gateInfo.isForced == true)
     }
-    
-    @Test("Version comparison - equality")
-    func versionEquality() {
-        let v1 = SemanticVersion(string: "1.2.3")!
-        let v2 = SemanticVersion(string: "1.2.3")!
-        
-        #expect(v1 == v2)
+
+    @Test("Dismissable gate type is blocked and dismissable")
+    func dismissableGateBlocked() {
+        let gateInfo = GateInformation(
+            gateType: .dismissable,
+            lastGateUpdate: "2025-01-01T00:00:00Z",
+            latestVersion: "2.0.0",
+            whatsNew: "New features available",
+            storeUrl: "https://apps.apple.com/app/id123"
+        )
+
+        #expect(gateInfo.isBlocked() == true)
+        #expect(gateInfo.blockingGateType() == .dismissable)
+        #expect(gateInfo.isDismissable == true)
+        #expect(gateInfo.isForced == false)
     }
-    
-    @Test("Version comparison - equality with different component counts")
-    func versionEqualityDifferentCounts() {
-        let v1 = SemanticVersion(string: "1.2.0")!
-        let v2 = SemanticVersion(string: "1.2")!
-        
-        #expect(v1 == v2)
-        
-        let v3 = SemanticVersion(string: "2.0.0.0")!
-        let v4 = SemanticVersion(string: "2")!
-        
-        #expect(v3 == v4)
+
+    @Test("Modal gate type is blocked and dismissable")
+    func modalGateBlocked() {
+        let gateInfo = GateInformation(
+            gateType: .modal,
+            lastGateUpdate: "2025-01-01T00:00:00Z",
+            latestVersion: "2.0.0",
+            whatsNew: "Recommended update",
+            storeUrl: "https://apps.apple.com/app/id123"
+        )
+
+        #expect(gateInfo.isBlocked() == true)
+        #expect(gateInfo.blockingGateType() == .modal)
+        #expect(gateInfo.isDismissable == true)
+        #expect(gateInfo.isForced == false)
     }
-    
-    @Test("Version comparison - 2.0.0 should NOT be less than 1.9.0")
-    func versionComparisonFix() {
-        let v2_0_0 = SemanticVersion(string: "2.0.0")!
-        let v1_9_0 = SemanticVersion(string: "1.9.0")!
-        
-        #expect(v1_9_0 < v2_0_0)
-        #expect(!(v2_0_0 < v1_9_0))
-    }
-    
-    @Test("Version comparison - arbitrary length versions")
-    func arbitraryLengthVersions() {
-        let v1 = SemanticVersion(string: "1.2.3.4")!
-        let v2 = SemanticVersion(string: "1.2.3.5")!
-        let v3 = SemanticVersion(string: "1.2.4")!
-        
-        #expect(v1 < v2)
-        #expect(v1 < v3)
-        #expect(v2 < v3)
+
+    @Test("Gate information with nil optional fields")
+    func gateInfoWithNilFields() {
+        let gateInfo = GateInformation(
+            gateType: .live,
+            lastGateUpdate: "",
+            latestVersion: nil,
+            whatsNew: nil,
+            storeUrl: nil
+        )
+
+        #expect(gateInfo.isBlocked() == false)
+        #expect(gateInfo.latestVersion == nil)
+        #expect(gateInfo.whatsNew == nil)
+        #expect(gateInfo.storeUrl == nil)
     }
 }
 
-@Suite("Version Compliance Tests")
-struct VersionComplianceTests {
-    
-    @Test("Blocking when below minimum version")
-    func blockWhenBelowMinVersion() {
-        let currentVersion = SemanticVersion(string: "1.0.0")!
-        let gateInfo = GateInformation(
-            lastGateUpdate: "",
-            minVersion: Gate(version: "2.0.0", type: .forced),
-            blockedVersions: [],
-            latestVersion: nil,
-            whatsNew: nil,
-            appStoreURL: nil
-        )
-        
-        #expect(gateInfo.isBlocked(currentVersion: currentVersion) == true)
+// MARK: - Gate Type Enum Tests
+
+@Suite("Version Gate Type Tests")
+struct VersionGateTypeTests {
+
+    @Test("Gate type raw values match backend")
+    func gateTypeRawValues() {
+        #expect(VersionGateType.forced.rawValue == 0)
+        #expect(VersionGateType.dismissable.rawValue == 1)
+        #expect(VersionGateType.modal.rawValue == 2)
+        #expect(VersionGateType.live.rawValue == 3)
     }
-    
-    @Test("NOT blocking when at minimum version")
-    func noBlockWhenAtMinVersion() {
-        let currentVersion = SemanticVersion(string: "2.0.0")!
-        let gateInfo = GateInformation(
-            lastGateUpdate: "",
-            minVersion: Gate(version: "2.0.0", type: .forced),
-            blockedVersions: [],
-            latestVersion: nil,
-            whatsNew: nil,
-            appStoreURL: nil
-        )
-        
-        #expect(gateInfo.isBlocked(currentVersion: currentVersion) == false)
+
+    @Test("Gate type can be created from raw values")
+    func gateTypeFromRawValue() {
+        #expect(VersionGateType(rawValue: 0) == .forced)
+        #expect(VersionGateType(rawValue: 1) == .dismissable)
+        #expect(VersionGateType(rawValue: 2) == .modal)
+        #expect(VersionGateType(rawValue: 3) == .live)
+        #expect(VersionGateType(rawValue: 99) == nil)
     }
-    
-    @Test("NOT blocking when above minimum version")
-    func noBlockWhenAboveMinVersion() {
-        let currentVersion = SemanticVersion(string: "3.0.0")!
-        let gateInfo = GateInformation(
-            lastGateUpdate: "",
-            minVersion: Gate(version: "2.0.0", type: .forced),
-            blockedVersions: [],
-            latestVersion: nil,
-            whatsNew: nil,
-            appStoreURL: nil
-        )
-        
-        #expect(gateInfo.isBlocked(currentVersion: currentVersion) == false)
+}
+
+// MARK: - JSON Decoding Tests
+
+@Suite("Gate Information Decoding Tests")
+struct GateInformationDecodingTests {
+
+    @Test("Decodes complete gate information")
+    func decodesCompleteGateInfo() throws {
+        let json = """
+        {
+            "gateType": 0,
+            "lastGateUpdate": "2025-01-01T00:00:00Z",
+            "latestVersion": "2.0.0",
+            "whatsNew": "Bug fixes",
+            "storeUrl": "https://apps.apple.com/app/id123"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let gateInfo = try JSONDecoder().decode(GateInformation.self, from: data)
+
+        #expect(gateInfo.gateType == .forced)
+        #expect(gateInfo.lastGateUpdate == "2025-01-01T00:00:00Z")
+        #expect(gateInfo.latestVersion == "2.0.0")
+        #expect(gateInfo.whatsNew == "Bug fixes")
+        #expect(gateInfo.storeUrl == "https://apps.apple.com/app/id123")
     }
-    
-    @Test("Blocking when on blocked version")
-    func blockWhenOnBlockedVersion() {
-        let currentVersion = SemanticVersion(string: "2.1.0")!
-        let gateInfo = GateInformation(
-            lastGateUpdate: "",
-            minVersion: Gate(version: "1.0.0", type: .forced),
-            blockedVersions: [Gate(version: "2.1.0", type: .forced)],
-            latestVersion: nil,
-            whatsNew: nil,
-            appStoreURL: nil
-        )
-        
-        #expect(gateInfo.isBlocked(currentVersion: currentVersion) == true)
+
+    @Test("Decodes gate information with missing optional fields")
+    func decodesMissingOptionalFields() throws {
+        let json = """
+        {
+            "gateType": 3,
+            "lastGateUpdate": "2025-01-01T00:00:00Z"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let gateInfo = try JSONDecoder().decode(GateInformation.self, from: data)
+
+        #expect(gateInfo.gateType == .live)
+        #expect(gateInfo.lastGateUpdate == "2025-01-01T00:00:00Z")
+        #expect(gateInfo.latestVersion == nil)
+        #expect(gateInfo.whatsNew == nil)
+        #expect(gateInfo.storeUrl == nil)
     }
-    
-    @Test("NOT blocking when not on blocked version")
-    func noBlockWhenNotOnBlockedVersion() {
-        let currentVersion = SemanticVersion(string: "2.2.0")!
-        let gateInfo = GateInformation(
-            lastGateUpdate: "",
-            minVersion: Gate(version: "1.0.0", type: .forced),
-            blockedVersions: [Gate(version: "2.1.0", type: .forced)],
-            latestVersion: nil,
-            whatsNew: nil,
-            appStoreURL: nil
-        )
-        
-        #expect(gateInfo.isBlocked(currentVersion: currentVersion) == false)
+
+    @Test("Defaults to live gate type when missing or invalid")
+    func defaultsToLiveGateType() throws {
+        let json = """
+        {
+            "lastGateUpdate": "2025-01-01T00:00:00Z"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let gateInfo = try JSONDecoder().decode(GateInformation.self, from: data)
+
+        #expect(gateInfo.gateType == .live)
     }
-    
-    @Test("Blocking when both below min AND on blocked version")
-    func blockWhenBothConditionsMet() {
-        // This version is below min AND is the blocked version
-        let currentVersion = SemanticVersion(string: "1.5.0")!
-        let gateInfo = GateInformation(
-            lastGateUpdate: "",
-            minVersion: Gate(version: "2.0.0", type: .forced),
-            blockedVersions: [Gate(version: "1.5.0", type: .forced)],
-            latestVersion: nil,
-            whatsNew: nil,
-            appStoreURL: nil
-        )
-        
-        #expect(gateInfo.isBlocked(currentVersion: currentVersion) == true)
-    }
-    
-    @Test("NOT blocking when no requirements")
-    func noBlockWhenNoRequirements() {
-        let currentVersion = SemanticVersion(string: "1.0.0")!
-        let gateInfo = GateInformation(
-            lastGateUpdate: "",
-            minVersion: nil,
-            blockedVersions: [],
-            latestVersion: nil,
-            whatsNew: nil,
-            appStoreURL: nil
-        )
-        
-        #expect(gateInfo.isBlocked(currentVersion: currentVersion) == false)
+
+    @Test("Handles invalid gate type value")
+    func handlesInvalidGateType() throws {
+        let json = """
+        {
+            "gateType": 999,
+            "lastGateUpdate": "2025-01-01T00:00:00Z"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let gateInfo = try JSONDecoder().decode(GateInformation.self, from: data)
+
+        #expect(gateInfo.gateType == .live) // Falls back to live
     }
 }

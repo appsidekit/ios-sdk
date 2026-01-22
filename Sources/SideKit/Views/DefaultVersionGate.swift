@@ -92,8 +92,8 @@ public struct DefaultVersionGate: View {
                 // Buttons
                 VStack(spacing: 16) {
                     Button(action: {
-                        if let appStoreURLString = sideKit.gateInformation?.appStoreURL,
-                           let url = URL(string: appStoreURLString) {
+                        if let storeUrlString = sideKit.gateInformation?.storeUrl,
+                           let url = URL(string: storeUrlString) {
                             openURL(url)
                         }
                     }) {
