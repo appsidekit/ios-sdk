@@ -54,7 +54,21 @@ final class AnalyticsAgent: AnalyticsAgentProtocol {
     }
     
     func getGateInformation() async -> GateInformation? {
-        guard let url = URL(string: api + "v1/version") else { return nil }
+        // Get app version for query parameter
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        guard !appVersion.isEmpty else {
+            SKLog("Failed to get app version for gate information request")
+            return nil
+        }
+
+        // Build URL with query parameters (storeType=0 for iOS App Store)
+        var components = URLComponents(string: api + "v1/version")
+        components?.queryItems = [
+            URLQueryItem(name: "storeType", value: "0"),
+            URLQueryItem(name: "appVersion", value: appVersion)
+        ]
+
+        guard let url = components?.url else { return nil }
 
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
