@@ -123,7 +123,7 @@ public final class SideKit: ObservableObject {
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
         let gateInfoWithVersion = gateInfo.withCachedAppVersion(appVersion)
         settings.cachedGateInformation = gateInfoWithVersion
-        SKLog("Cached gate info for app version \(appVersion) - latestVersion: \(gateInfo.latestVersion ?? "nil"), whatsNew: \(gateInfo.whatsNew ?? "nil"), lastGateUpdate: \(gateInfo.lastGateUpdate)")
+        SKLog("Cached gate info for app version \(appVersion) - gateType: \(gateInfo.gateType), latestVersion: \(gateInfo.latestVersion ?? "nil"), whatsNew: \(gateInfo.whatsNew ?? "nil"), lastGateUpdate: \(gateInfo.lastGateUpdate)")
     }
 
     /// Loads gate information from cached settings if it matches current app version
@@ -166,15 +166,15 @@ public final class SideKit: ObservableObject {
                 return
             }
         } else {
-            // Not blocked, nothing to show
+            // Not blocked - dismiss any existing gate
+            if showUpdateScreen {
+                SKLog("Gate lifted - user is no longer blocked")
+                showUpdateScreen = false
+                #if canImport(UIKit)
+                dismissAutomaticUpdateGate()
+                #endif
+            }
             return
-        }
-
-        // For forced gates, always show regardless of whether we've seen it before
-        // For new gates (different lastGateUpdate), always show
-        SKLog("Gate type: \(gateInfo.gateType)")
-        if isNewGate {
-            SKLog("New gate detected (lastGateUpdate changed from \(previousGateUpdate ?? "nil") to \(gateInfo.lastGateUpdate))")
         }
 
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"

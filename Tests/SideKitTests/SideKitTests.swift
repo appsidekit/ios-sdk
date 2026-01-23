@@ -105,11 +105,9 @@ struct GateInformationTests {
 
         #expect(gateInfo.isBlocked() == false)
         #expect(gateInfo.blockingGateType() == nil)
-        #expect(gateInfo.isDismissable == false)
-        #expect(gateInfo.isForced == false)
     }
 
-    @Test("Forced gate type is blocked and not dismissable")
+    @Test("Forced gate type is blocked")
     func forcedGateBlocked() {
         let gateInfo = GateInformation(
             gateType: .forced,
@@ -121,11 +119,9 @@ struct GateInformationTests {
 
         #expect(gateInfo.isBlocked() == true)
         #expect(gateInfo.blockingGateType() == .forced)
-        #expect(gateInfo.isDismissable == false)
-        #expect(gateInfo.isForced == true)
     }
 
-    @Test("Dismissable gate type is blocked and dismissable")
+    @Test("Dismissable gate type is blocked")
     func dismissableGateBlocked() {
         let gateInfo = GateInformation(
             gateType: .dismissable,
@@ -137,11 +133,9 @@ struct GateInformationTests {
 
         #expect(gateInfo.isBlocked() == true)
         #expect(gateInfo.blockingGateType() == .dismissable)
-        #expect(gateInfo.isDismissable == true)
-        #expect(gateInfo.isForced == false)
     }
 
-    @Test("Modal gate type is blocked and dismissable")
+    @Test("Modal gate type is blocked")
     func modalGateBlocked() {
         let gateInfo = GateInformation(
             gateType: .modal,
@@ -153,8 +147,6 @@ struct GateInformationTests {
 
         #expect(gateInfo.isBlocked() == true)
         #expect(gateInfo.blockingGateType() == .modal)
-        #expect(gateInfo.isDismissable == true)
-        #expect(gateInfo.isForced == false)
     }
 
     @Test("Gate information with nil optional fields")
@@ -181,18 +173,18 @@ struct VersionGateTypeTests {
 
     @Test("Gate type raw values match backend")
     func gateTypeRawValues() {
+        #expect(VersionGateType.live.rawValue == -1)
         #expect(VersionGateType.forced.rawValue == 0)
         #expect(VersionGateType.dismissable.rawValue == 1)
         #expect(VersionGateType.modal.rawValue == 2)
-        #expect(VersionGateType.live.rawValue == 3)
     }
 
     @Test("Gate type can be created from raw values")
     func gateTypeFromRawValue() {
+        #expect(VersionGateType(rawValue: -1) == .live)
         #expect(VersionGateType(rawValue: 0) == .forced)
         #expect(VersionGateType(rawValue: 1) == .dismissable)
         #expect(VersionGateType(rawValue: 2) == .modal)
-        #expect(VersionGateType(rawValue: 3) == .live)
         #expect(VersionGateType(rawValue: 99) == nil)
     }
 }
@@ -227,7 +219,7 @@ struct GateInformationDecodingTests {
     func decodesMissingOptionalFields() throws {
         let json = """
         {
-            "gateType": 3,
+            "gateType": -1,
             "lastGateUpdate": "2025-01-01T00:00:00Z"
         }
         """
@@ -239,6 +231,36 @@ struct GateInformationDecodingTests {
         #expect(gateInfo.latestVersion == nil)
         #expect(gateInfo.whatsNew == nil)
         #expect(gateInfo.storeUrl == nil)
+    }
+
+    @Test("Decodes live gate type from -1")
+    func decodesLiveGateType() throws {
+        let json = """
+        {
+            "gateType": -1,
+            "lastGateUpdate": "2025-01-01T00:00:00Z",
+            "latestVersion": "2.0.0"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let gateInfo = try JSONDecoder().decode(GateInformation.self, from: data)
+
+        #expect(gateInfo.gateType == .live)
+        #expect(gateInfo.isBlocked() == false)
+    }
+
+    @Test("Invalid gate type defaults to live")
+    func invalidGateTypeDefaultsToLive() throws {
+        let json = """
+        {
+            "gateType": 99,
+            "lastGateUpdate": "2025-01-01T00:00:00Z"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let gateInfo = try JSONDecoder().decode(GateInformation.self, from: data)
+
+        #expect(gateInfo.gateType == .live)
     }
 
     @Test("Defaults to live gate type when missing or invalid")

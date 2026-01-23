@@ -10,14 +10,14 @@ import Foundation
 /// Version gate type enum matching backend
 /// The server determines the appropriate gate type based on the app version
 public enum VersionGateType: Int, Codable {
+    case live = -1
     case forced = 0
     case dismissable = 1
     case modal = 2
-    case live = 3
 }
 
 /// Gate information from the version API
-/// The server now handles version comparison and returns the appropriate gate type directly
+/// The server handles version comparison and returns the appropriate gate type directly
 public struct GateInformation: Codable {
     /// The gate type determined by the server based on the app version
     public let gateType: VersionGateType
@@ -90,13 +90,4 @@ public struct GateInformation: Codable {
         return gateType != .live
     }
 
-    /// Computed property to determine if the gate is dismissable
-    public var isDismissable: Bool {
-        return gateType == .dismissable || gateType == .modal
-    }
-
-    /// Computed property to determine if the gate is forced (cannot be dismissed)
-    public var isForced: Bool {
-        return gateType == .forced
-    }
 }
