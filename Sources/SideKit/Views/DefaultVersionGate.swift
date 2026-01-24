@@ -14,13 +14,13 @@ import AppKit
 
 public struct DefaultVersionGate: View {
     @Environment(\.dismiss) private var dismiss
-    private let dismissable: Bool
+    private let dismissible: Bool
     private let onSkip: (() -> Void)?
     
     @ObservedObject private var sideKit = SideKit.shared
     
-    public init(dismissable: Bool = true, onSkip: (() -> Void)? = nil) {
-        self.dismissable = dismissable
+    public init(dismissible: Bool = true, onSkip: (() -> Void)? = nil) {
+        self.dismissible = dismissible
         self.onSkip = onSkip
     }
     
@@ -106,7 +106,7 @@ public struct DefaultVersionGate: View {
                             .cornerRadius(18)
                     }
                     
-                    if dismissable {
+                    if dismissible {
                         Button(action: {
                             onSkip?()
                             dismiss()
@@ -167,5 +167,5 @@ public struct DefaultVersionGate: View {
 }
 
 #Preview {
-    DefaultVersionGate(dismissable: true)
+    DefaultVersionGate(dismissible: true)
 }

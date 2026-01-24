@@ -12,7 +12,7 @@ import Foundation
 public enum VersionGateType: Int, Codable {
     case live = -1
     case forced = 0
-    case dismissable = 1
+    case dismissible = 1
     case modal = 2
 }
 

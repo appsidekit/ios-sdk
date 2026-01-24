@@ -121,10 +121,10 @@ struct GateInformationTests {
         #expect(gateInfo.blockingGateType() == .forced)
     }
 
-    @Test("Dismissable gate type is blocked")
-    func dismissableGateBlocked() {
+    @Test("Dismissible gate type is blocked")
+    func dismissibleGateBlocked() {
         let gateInfo = GateInformation(
-            gateType: .dismissable,
+            gateType: .dismissible,
             lastGateUpdate: "2025-01-01T00:00:00Z",
             latestVersion: "2.0.0",
             whatsNew: "New features available",
@@ -132,7 +132,7 @@ struct GateInformationTests {
         )
 
         #expect(gateInfo.isBlocked() == true)
-        #expect(gateInfo.blockingGateType() == .dismissable)
+        #expect(gateInfo.blockingGateType() == .dismissible)
     }
 
     @Test("Modal gate type is blocked")
@@ -175,7 +175,7 @@ struct VersionGateTypeTests {
     func gateTypeRawValues() {
         #expect(VersionGateType.live.rawValue == -1)
         #expect(VersionGateType.forced.rawValue == 0)
-        #expect(VersionGateType.dismissable.rawValue == 1)
+        #expect(VersionGateType.dismissible.rawValue == 1)
         #expect(VersionGateType.modal.rawValue == 2)
     }
 
@@ -183,7 +183,7 @@ struct VersionGateTypeTests {
     func gateTypeFromRawValue() {
         #expect(VersionGateType(rawValue: -1) == .live)
         #expect(VersionGateType(rawValue: 0) == .forced)
-        #expect(VersionGateType(rawValue: 1) == .dismissable)
+        #expect(VersionGateType(rawValue: 1) == .dismissible)
         #expect(VersionGateType(rawValue: 2) == .modal)
         #expect(VersionGateType(rawValue: 99) == nil)
     }
@@ -303,7 +303,7 @@ struct CacheValidationTests {
     @Test("Cache encodes and decodes with app version")
     func cacheEncodesDecodesWithAppVersion() throws {
         let gateInfo = GateInformation(
-            gateType: .dismissable,
+            gateType: .dismissible,
             lastGateUpdate: "2025-01-01T00:00:00Z",
             latestVersion: "2.0.0",
             whatsNew: "New features",
@@ -315,7 +315,7 @@ struct CacheValidationTests {
         let decoded = try JSONDecoder().decode(GateInformation.self, from: data)
 
         #expect(decoded.cachedForAppVersion == "1.5.0")
-        #expect(decoded.gateType == .dismissable)
+        #expect(decoded.gateType == .dismissible)
     }
 
     @Test("API failure with no cache returns nil (not blocked)")

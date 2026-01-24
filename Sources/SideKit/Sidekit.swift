@@ -160,9 +160,9 @@ public final class SideKit: ObservableObject {
         let isNewGate = previousGateUpdate != gateInfo.lastGateUpdate
 
         if isBlocked {
-            // If it's not a new gate and the blocking gate is dismissable, we've already shown it - skip
+            // If it's not a new gate and the blocking gate is dismissible, we've already shown it - skip
             if !isNewGate && blockingGateType != .forced {
-                SKLog("Gate already shown before (lastGateUpdate: \(gateInfo.lastGateUpdate)). Skipping dismissable gate.")
+                SKLog("Gate already shown before (lastGateUpdate: \(gateInfo.lastGateUpdate)). Skipping dismissible gate.")
                 return
             }
         } else {
@@ -183,25 +183,25 @@ public final class SideKit: ObservableObject {
         showUpdateScreen = true
 
         // Use the specific gate type that's blocking
-        let isDismissable = blockingGateType != .forced
-        processAutomaticPresentation(isDismissable: isDismissable)
+        let isDismissible = blockingGateType != .forced
+        processAutomaticPresentation(isDismissible: isDismissible)
     }
     
-    private func processAutomaticPresentation(isDismissable: Bool) {
+    private func processAutomaticPresentation(isDismissible: Bool) {
         guard presentationMode == .automatic else { return }
         #if canImport(UIKit)
-        presentAutomaticUpdateGate(isDismissable: isDismissable)
+        presentAutomaticUpdateGate(isDismissible: isDismissible)
         #endif
     }
     
     #if canImport(UIKit)
     private var updateWindow: UIWindow?
     
-    private func presentAutomaticUpdateGate(isDismissable: Bool) {
+    private func presentAutomaticUpdateGate(isDismissible: Bool) {
         guard updateWindow == nil else { return }
         
         let gateView = DefaultVersionGate(
-            dismissable: isDismissable,
+            dismissible: isDismissible,
             onSkip: { [weak self] in
                 self?.dismissAutomaticUpdateGate()
             }
