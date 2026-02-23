@@ -27,30 +27,14 @@ extension SideKit {
     }
 }
 
-struct SignalPayload: Codable {
-    let osVersion: String
-    let appVersion: String
-    let country: String
-    let language: String
-    let platform: String
-    let deviceModel: String
-    let signals: [SideKit.Signal]
-
-    init(
-        osVersion: String,
-        appVersion: String,
-        country: String,
-        language: String,
-        platform: String,
-        deviceModel: String,
-        signals: [SideKit.Signal]
-    ) {
-        self.osVersion = osVersion
-        self.appVersion = appVersion
-        self.country = country
-        self.language = language
-        self.platform = platform
-        self.deviceModel = deviceModel
-        self.signals = signals
+extension SideKit {
+    struct SignalPayload: Codable {
+        let osVersion: String
+        let appVersion: String
+        let country: String
+        let language: String
+        let platform: String
+        let deviceModel: String
+        let signals: [SideKit.Signal]
     }
 }

@@ -24,6 +24,15 @@ public final class SideKit: ObservableObject {
         case automatic
     }
     
+    /// Returns `true` when the server reports a newer version than the current bundle version.
+    public var isUpdateAvailable: Bool {
+        guard let latest = gateInformation?.latestVersion,
+              let current = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String else {
+            return false
+        }
+        return latest.compare(current, options: .numeric) == .orderedDescending
+    }
+
     private let settings: SettingsStoreProtocol
     private var analyticsAgent: AnalyticsAgentProtocol?
     
@@ -267,14 +276,33 @@ public final class SideKit: ObservableObject {
     /// Send multiple Signal objects
     public func sendSignal(_ signals: [Signal]) {
         guard isAnalyticsEnabled else { return }
-        
+
         guard let agent = analyticsAgent else {
             SKLog("Warning: sendSignal called before configure(). Call configure(apiKey:) first.")
             return
         }
         agent.sendSignal(signals: signals)
     }
-        
+
+    // MARK: - Feedback
+
+    /// Send user feedback. Device metadata is collected automatically.
+    /// - Parameters:
+    ///   - feedbackText: The feedback content (required).
+    ///   - endUserId: An optional identifier for the end user.
+    ///   - userAttributes: Optional key-value attributes about the user.
+    public func sendFeedback(
+        _ feedbackText: String,
+        endUserId: String? = nil,
+        userAttributes: [String: String]? = nil
+    ) {
+        guard let agent = analyticsAgent else {
+            SKLog("Warning: sendFeedback called before configure(). Call configure(apiKey:) first.")
+            return
+        }
+        agent.sendFeedback(feedbackText: feedbackText, endUserId: endUserId, userAttributes: userAttributes)
+    }
+
 }
 
 // MARK: - Logging

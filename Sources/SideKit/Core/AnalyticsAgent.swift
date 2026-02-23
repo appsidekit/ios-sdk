@@ -14,6 +14,7 @@ import UIKit
 protocol AnalyticsAgentProtocol {
     func getGateInformation() async -> GateInformation?
     func sendSignal(signals: [SideKit.Signal])
+    func sendFeedback(feedbackText: String, endUserId: String?, userAttributes: [String: String]?)
 }
 
 @MainActor
@@ -93,15 +94,7 @@ final class AnalyticsAgent: AnalyticsAgentProtocol {
         }
     }
     
-    func sendSignal(signals: [SideKit.Signal]) {
-        guard !signals.isEmpty else { return }
-        
-        // send signal
-        guard let url = URL(string: api + "v1") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        
-        // metadata
+    private var deviceMetadata: (osVersion: String, appVersion: String, country: String, language: String) {
         let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
         let locale = Locale.current
@@ -116,16 +109,27 @@ final class AnalyticsAgent: AnalyticsAgentProtocol {
             language = locale.languageCode ?? "unknown"
         }
 
-        let payload = SignalPayload(
-            osVersion: osVersion,
-            appVersion: appVersion,
-            country: country,
-            language: language,
+        return (osVersion, appVersion, country, language)
+    }
+
+    func sendSignal(signals: [SideKit.Signal]) {
+        guard !signals.isEmpty else { return }
+
+        guard let url = URL(string: api + "v1") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+
+        let meta = deviceMetadata
+        let payload = SideKit.SignalPayload(
+            osVersion: meta.osVersion,
+            appVersion: meta.appVersion,
+            country: meta.country,
+            language: meta.language,
             platform: platform,
             deviceModel: deviceModel,
             signals: signals
         )
-        
+
         guard let jsonData = try? JSONEncoder().encode(payload) else {
             return
         }
@@ -144,6 +148,46 @@ final class AnalyticsAgent: AnalyticsAgentProtocol {
                 }
             } catch {
                 SKLog("Sending signals \(signals) failed with error: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    func sendFeedback(feedbackText: String, endUserId: String?, userAttributes: [String: String]?) {
+        guard let url = URL(string: api + "v1/feedback") else { return }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+
+        let meta = deviceMetadata
+        let payload = SideKit.FeedbackPayload(
+            feedbackText: feedbackText,
+            endUserId: endUserId,
+            userAttributes: userAttributes,
+            platform: platform,
+            appVersion: meta.appVersion,
+            osVersion: meta.osVersion,
+            country: meta.country,
+            language: meta.language,
+            deviceModel: deviceModel
+        )
+
+        guard let jsonData = try? JSONEncoder().encode(payload) else {
+            return
+        }
+        request.httpBody = jsonData
+        configureHeaders(for: &request)
+
+        Task {
+            do {
+                let (_, response) = try await URLSession.shared.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse {
+                    if httpResponse.statusCode == 201 {
+                        SKLog("Feedback sent successfully")
+                    } else {
+                        SKLog("Feedback failed with status: \(httpResponse.statusCode)")
+                    }
+                }
+            } catch {
+                SKLog("Sending feedback failed with error: \(error.localizedDescription)")
             }
         }
     }

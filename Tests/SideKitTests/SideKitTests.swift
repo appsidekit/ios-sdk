@@ -14,6 +14,10 @@ final class MockAnalyticsAgent: AnalyticsAgentProtocol {
     var sendSignalCallCount = 0
     var lastSentSignals: [SideKit.Signal]?
     var gateInformationToReturn: GateInformation?
+    var sendFeedbackCallCount = 0
+    var lastFeedbackText: String?
+    var lastFeedbackEndUserId: String?
+    var lastFeedbackUserAttributes: [String: String]?
 
     func getGateInformation() async -> GateInformation? {
         return gateInformationToReturn
@@ -22,6 +26,13 @@ final class MockAnalyticsAgent: AnalyticsAgentProtocol {
     func sendSignal(signals: [SideKit.Signal]) {
         sendSignalCallCount += 1
         lastSentSignals = signals
+    }
+
+    func sendFeedback(feedbackText: String, endUserId: String?, userAttributes: [String: String]?) {
+        sendFeedbackCallCount += 1
+        lastFeedbackText = feedbackText
+        lastFeedbackEndUserId = endUserId
+        lastFeedbackUserAttributes = userAttributes
     }
 }
 
