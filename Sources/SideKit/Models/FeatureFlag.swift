@@ -18,16 +18,6 @@ extension SideKit {
         public let isFlag: Bool
         /// When this flag was last updated on the server (ISO 8601).
         public let updatedAt: String
-        /// Non-nil if the flag has been archived in the dashboard. Archived flags are still served to SDKs.
-        public let archivedAt: String?
-
-        public init(key: String, value: FeatureFlagValue, isFlag: Bool, updatedAt: String, archivedAt: String? = nil) {
-            self.key = key
-            self.value = value
-            self.isFlag = isFlag
-            self.updatedAt = updatedAt
-            self.archivedAt = archivedAt
-        }
 
         public var description: String {
             "\(key): \(value)"
