@@ -14,6 +14,7 @@ final class MockAnalyticsAgent: AnalyticsAgentProtocol {
     var sendSignalCallCount = 0
     var lastSentSignals: [SideKit.Signal]?
     var gateInformationToReturn: GateInformation?
+    var flagsToReturn: [SideKit.FeatureFlag]?
     var sendFeedbackCallCount = 0
     var lastFeedbackText: String?
     var lastFeedbackEndUserId: String?
@@ -21,6 +22,10 @@ final class MockAnalyticsAgent: AnalyticsAgentProtocol {
 
     func getGateInformation() async -> GateInformation? {
         return gateInformationToReturn
+    }
+
+    func getFlags() async -> [SideKit.FeatureFlag]? {
+        return flagsToReturn
     }
 
     func sendSignal(signals: [SideKit.Signal]) {
@@ -42,6 +47,7 @@ final class MockSettingsStore: SettingsStoreProtocol {
     var isAnalyticsEnabled: Bool
     var isFirstLaunch: Bool = true
     var cachedGateInformation: GateInformation?
+    var cachedFlags: [SideKit.FeatureFlag]?
 
     init(analyticsEnabled: Bool) {
         self.isAnalyticsEnabled = analyticsEnabled
@@ -383,5 +389,133 @@ struct CacheValidationTests {
         let cacheIsValid = cachedGateInfo.cachedForAppVersion == currentAppVersion
 
         #expect(cacheIsValid == false) // Cache should be invalidated
+    }
+}
+
+// MARK: - Feature Flag Tests
+
+@Suite("Feature Flag Tests")
+struct FeatureFlagTests {
+
+    @Test("flag() returns boolean value for boolean flags")
+    @MainActor
+    func flagReturnsBoolValue() async {
+        let mockAgent = MockAnalyticsAgent()
+        mockAgent.flagsToReturn = [
+            SideKit.FeatureFlag(key: "dark_mode", value: .bool(true), isFlag: true, updatedAt: "2026-01-01T00:00:00Z"),
+            SideKit.FeatureFlag(key: "beta_feature", value: .bool(false), isFlag: true, updatedAt: "2026-01-01T00:00:00Z"),
+        ]
+        let mockSettings = MockSettingsStore(analyticsEnabled: true)
+        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+
+        await sideKit.refreshFlags()
+
+        #expect(sideKit.flag("dark_mode") == true)
+        #expect(sideKit.flag("beta_feature") == false)
+    }
+
+    @Test("flag() returns default when key not found")
+    @MainActor
+    func flagReturnsDefaultWhenMissing() async {
+        let mockAgent = MockAnalyticsAgent()
+        mockAgent.flagsToReturn = []
+        let mockSettings = MockSettingsStore(analyticsEnabled: true)
+        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+
+        await sideKit.refreshFlags()
+
+        #expect(sideKit.flag("nonexistent") == false)
+        #expect(sideKit.flag("nonexistent", default: true) == true)
+    }
+
+    @Test("config() returns string value for config entries")
+    @MainActor
+    func configReturnsStringValue() async {
+        let mockAgent = MockAnalyticsAgent()
+        mockAgent.flagsToReturn = [
+            SideKit.FeatureFlag(key: "api_url", value: .string("https://example.com"), isFlag: false, updatedAt: "2026-01-01T00:00:00Z"),
+        ]
+        let mockSettings = MockSettingsStore(analyticsEnabled: true)
+        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+
+        await sideKit.refreshFlags()
+
+        #expect(sideKit.config("api_url") == "https://example.com")
+    }
+
+    @Test("config() returns default when key not found")
+    @MainActor
+    func configReturnsDefaultWhenMissing() async {
+        let mockAgent = MockAnalyticsAgent()
+        mockAgent.flagsToReturn = []
+        let mockSettings = MockSettingsStore(analyticsEnabled: true)
+        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+
+        await sideKit.refreshFlags()
+
+        #expect(sideKit.config("missing") == "")
+        #expect(sideKit.config("missing", default: "fallback") == "fallback")
+    }
+
+    @Test("refreshFlags caches flags to settings")
+    @MainActor
+    func refreshFlagsCachesToSettings() async {
+        let mockAgent = MockAnalyticsAgent()
+        let testFlags = [
+            SideKit.FeatureFlag(key: "cached_flag", value: .bool(true), isFlag: true, updatedAt: "2026-01-01T00:00:00Z"),
+        ]
+        mockAgent.flagsToReturn = testFlags
+        let mockSettings = MockSettingsStore(analyticsEnabled: true)
+        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+
+        await sideKit.refreshFlags()
+
+        #expect(mockSettings.cachedFlags == testFlags)
+    }
+
+    @Test("refreshFlags falls back to cache when API fails")
+    @MainActor
+    func refreshFlagsFallsBackToCache() async {
+        let mockAgent = MockAnalyticsAgent()
+        mockAgent.flagsToReturn = nil // Simulate API failure
+        let cachedFlags = [
+            SideKit.FeatureFlag(key: "cached_flag", value: .bool(true), isFlag: true, updatedAt: "2026-01-01T00:00:00Z"),
+        ]
+        let mockSettings = MockSettingsStore(analyticsEnabled: true)
+        mockSettings.cachedFlags = cachedFlags
+        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+
+        await sideKit.refreshFlags()
+
+        #expect(sideKit.flags == cachedFlags)
+        #expect(sideKit.flag("cached_flag") == true)
+    }
+
+    @Test("FeatureFlag decodes from JSON correctly")
+    func featureFlagDecodesFromJSON() throws {
+        let json = """
+        [
+            {"key": "dark_mode", "value": true, "isFlag": true, "updatedAt": "2026-01-01T00:00:00Z"},
+            {"key": "api_url", "value": "https://example.com", "isFlag": false, "updatedAt": "2026-01-01T00:00:00Z"}
+        ]
+        """
+        let data = json.data(using: .utf8)!
+        let flags = try JSONDecoder().decode([SideKit.FeatureFlag].self, from: data)
+
+        #expect(flags.count == 2)
+        #expect(flags[0].key == "dark_mode")
+        #expect(flags[0].value == .bool(true))
+        #expect(flags[0].isFlag == true)
+        #expect(flags[1].key == "api_url")
+        #expect(flags[1].value == .string("https://example.com"))
+        #expect(flags[1].isFlag == false)
+    }
+
+    @Test("FeatureFlagValue equality works correctly")
+    func featureFlagValueEquality() {
+        #expect(SideKit.FeatureFlagValue.bool(true) == SideKit.FeatureFlagValue.bool(true))
+        #expect(SideKit.FeatureFlagValue.bool(true) != SideKit.FeatureFlagValue.bool(false))
+        #expect(SideKit.FeatureFlagValue.string("a") == SideKit.FeatureFlagValue.string("a"))
+        #expect(SideKit.FeatureFlagValue.string("a") != SideKit.FeatureFlagValue.bool(true))
     }
 }

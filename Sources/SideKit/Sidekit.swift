@@ -79,6 +79,7 @@ public final class SideKit: ObservableObject {
         
         setupLifecycleObservers()
         handleAppOpen()
+        await refreshFlags()
     }
     
     private func setupLifecycleObservers() {
@@ -256,6 +257,44 @@ public final class SideKit: ObservableObject {
     }
     #endif
     
+    // MARK: - Feature Flags
+
+    /// All feature flags fetched from the server. Updated on `configure()` and `refreshFlags()`.
+    @Published public private(set) var flags: [FeatureFlag] = []
+
+    /// Returns the boolean value of a flag, or `defaultValue` if the flag doesn't exist or isn't a boolean flag.
+    public func flag(_ key: String, default defaultValue: Bool = false) -> Bool {
+        guard let flag = flags.first(where: { $0.key == key }), flag.isFlag else {
+            return defaultValue
+        }
+        return flag.value.boolValue ?? defaultValue
+    }
+
+    /// Returns the string value of a config entry, or `defaultValue` if the key doesn't exist or isn't a config entry.
+    public func config(_ key: String, default defaultValue: String = "") -> String {
+        guard let flag = flags.first(where: { $0.key == key }), !flag.isFlag else {
+            return defaultValue
+        }
+        return flag.value.stringValue ?? defaultValue
+    }
+
+    /// Fetches the latest flags from the server. Falls back to cached flags on failure.
+    public func refreshFlags() async {
+        guard let agent = analyticsAgent else {
+            SKLog("Warning: refreshFlags called before configure(). Call configure(apiKey:) first.")
+            return
+        }
+
+        if let fetched = await agent.getFlags() {
+            self.flags = fetched
+            settings.cachedFlags = fetched
+            SKLog("Fetched \(fetched.count) flags from server")
+        } else if let cached = settings.cachedFlags {
+            self.flags = cached
+            SKLog("Using \(cached.count) cached flags (server unavailable)")
+        }
+    }
+
     // MARK: - Analytics
     
     /// Send an analytics signal with a single key.

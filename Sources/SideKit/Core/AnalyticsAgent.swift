@@ -13,6 +13,7 @@ import UIKit
 @MainActor
 protocol AnalyticsAgentProtocol {
     func getGateInformation() async -> GateInformation?
+    func getFlags() async -> [SideKit.FeatureFlag]?
     func sendSignal(signals: [SideKit.Signal])
     func sendFeedback(feedbackText: String, endUserId: String?, userAttributes: [String: String]?)
 }
@@ -94,6 +95,23 @@ final class AnalyticsAgent: AnalyticsAgentProtocol {
         }
     }
     
+    func getFlags() async -> [SideKit.FeatureFlag]? {
+        guard let url = URL(string: api + "v1/flags") else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        configureHeaders(for: &request)
+
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            let flags = try JSONDecoder().decode([SideKit.FeatureFlag].self, from: data)
+            return flags
+        } catch {
+            SKLog("Failed to fetch flags: \(error)")
+            return nil
+        }
+    }
+
     private var deviceMetadata: (osVersion: String, appVersion: String, country: String, language: String) {
         let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"

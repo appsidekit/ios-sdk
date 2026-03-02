@@ -11,6 +11,7 @@ protocol SettingsStoreProtocol: AnyObject {
     var isAnalyticsEnabled: Bool { get set }
     var isFirstLaunch: Bool { get set }
     var cachedGateInformation: GateInformation? { get set }
+    var cachedFlags: [SideKit.FeatureFlag]? { get set }
 }
 
 final class SettingsStore: SettingsStoreProtocol {
@@ -18,6 +19,7 @@ final class SettingsStore: SettingsStoreProtocol {
         static let analyticsEnabled = "sk_analytics_enabled"
         static let firstLaunch = "sk_first_launch"
         static let cachedGateInformation = "sk_cached_gate_information"
+        static let cachedFlags = "sk_cached_flags"
     }
 
     private let defaults: UserDefaults
@@ -54,6 +56,24 @@ final class SettingsStore: SettingsStoreProtocol {
                 defaults.set(data, forKey: Keys.cachedGateInformation)
             } else {
                 defaults.removeObject(forKey: Keys.cachedGateInformation)
+            }
+        }
+    }
+
+    var cachedFlags: [SideKit.FeatureFlag]? {
+        get {
+            guard let data = defaults.data(forKey: Keys.cachedFlags),
+                  let flags = try? JSONDecoder().decode([SideKit.FeatureFlag].self, from: data) else {
+                return nil
+            }
+            return flags
+        }
+        set {
+            if let flags = newValue,
+               let data = try? JSONEncoder().encode(flags) {
+                defaults.set(data, forKey: Keys.cachedFlags)
+            } else {
+                defaults.removeObject(forKey: Keys.cachedFlags)
             }
         }
     }
