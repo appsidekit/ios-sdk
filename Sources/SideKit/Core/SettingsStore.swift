@@ -12,6 +12,7 @@ protocol SettingsStoreProtocol: AnyObject {
     var isFirstLaunch: Bool { get set }
     var cachedGateInformation: GateInformation? { get set }
     var cachedFlags: [SideKit.FeatureFlag]? { get set }
+    var authSession: SideKit.AuthSession? { get set }
 }
 
 final class SettingsStore: SettingsStoreProtocol {
@@ -20,6 +21,7 @@ final class SettingsStore: SettingsStoreProtocol {
         static let firstLaunch = "sk_first_launch"
         static let cachedGateInformation = "sk_cached_gate_information"
         static let cachedFlags = "sk_cached_flags"
+        static let authSession = "sk_auth_session"
     }
 
     private let defaults: UserDefaults
@@ -74,6 +76,24 @@ final class SettingsStore: SettingsStoreProtocol {
                 defaults.set(data, forKey: Keys.cachedFlags)
             } else {
                 defaults.removeObject(forKey: Keys.cachedFlags)
+            }
+        }
+    }
+
+    var authSession: SideKit.AuthSession? {
+        get {
+            guard let data = defaults.data(forKey: Keys.authSession),
+                  let session = try? JSONDecoder().decode(SideKit.AuthSession.self, from: data) else {
+                return nil
+            }
+            return session
+        }
+        set {
+            if let session = newValue,
+               let data = try? JSONEncoder().encode(session) {
+                defaults.set(data, forKey: Keys.authSession)
+            } else {
+                defaults.removeObject(forKey: Keys.authSession)
             }
         }
     }

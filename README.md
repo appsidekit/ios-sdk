@@ -13,6 +13,7 @@ SideKit is a lightweight iOS SDK that provides seamless version gating and analy
 
 - **Version Gating**: Remotely force updates or suggest new versions to your users.
 - **Analytics Signals**: Send custom events (signals) to track user behavior and app health.
+- **Phone Auth**: Sign end users in with phone + OTP; the session is persisted across launches.
 - **Automatic Presentation**: Out-of-the-box UI for update prompts that works with both SwiftUI and UIKit.
 - **Lightweight**: Zero external dependencies and a tiny footprint.
 
@@ -89,6 +90,36 @@ SideKit.shared.isAnalyticsEnabled = false
 ```
 
 The preference is automatically persisted across app launches.
+
+### 5. Phone Auth
+
+SideKit currently supports phone as the only sign-in channel. `signIn` sends a one-time
+passcode; verifying it creates an account if the user doesn't already have one, otherwise
+signs them in. The session is persisted and restored on the next launch.
+
+```swift
+// 1. Send a code (creates the account if new, signs in if existing)
+let otp = await SideKit.shared.signIn("+15555550100")
+guard case .success(let sent) = otp else { return }
+
+// 2. Verify it to complete sign-in
+let result = await SideKit.shared.verifyOtp(requestId: sent.requestId, identifier: "+15555550100", code: "123456")
+switch result {
+case .success(let signIn):
+    print("Signed in as \(signIn.user.id)")
+    if signIn.isNewUser { /* route to onboarding, e.g. setHandle */ }
+case .failure(let err): print("Failed: \(err.code)") // e.g. "invalid_code", "rate_limited"
+}
+
+// Read auth state anywhere (SideKit is an ObservableObject)
+if SideKit.shared.isAuthenticated { /* ... */ }
+
+// Send the session token to your own backend and verify it via /v1/auth/introspect
+let token = SideKit.shared.sessionToken
+```
+
+Once signed in you can set a handle (`setHandle`) or sign out (`logout`). Feedback is
+automatically attributed to the signed-in user.
 
 ## Requirements
 

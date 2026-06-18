@@ -1,8 +1,11 @@
 //
-//  AnalyticsAgent.swift
+//  Meerkat.swift
 //  SideKit
 //
 //  Created by Ashish Selvaraj on 2025-11-24.
+//
+//  HTTP client for the SideKit API: version gating, analytics signals, feature
+//  flags, and feedback. End-user auth lives in AuthAgent.
 //
 
 import Foundation
@@ -11,7 +14,7 @@ import UIKit
 #endif
 
 @MainActor
-protocol AnalyticsAgentProtocol {
+protocol MeerkatProtocol {
     func getGateInformation() async -> GateInformation?
     func getFlags() async -> [SideKit.FeatureFlag]?
     func sendSignal(signals: [SideKit.Signal])
@@ -19,14 +22,14 @@ protocol AnalyticsAgentProtocol {
 }
 
 @MainActor
-final class AnalyticsAgent: AnalyticsAgentProtocol {
+final class Meerkat: MeerkatProtocol {
     let api = "https://api.appsidekit.com/"
     let apiKey: String
-    
+
     init(apiKey: String) {
         self.apiKey = apiKey
     }
-    
+
     private func configureHeaders(for request: inout URLRequest) {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -54,7 +57,7 @@ final class AnalyticsAgent: AnalyticsAgentProtocol {
         return ""
         #endif
     }
-    
+
     func getGateInformation() async -> GateInformation? {
         // Get app version for query parameter
         let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
@@ -94,7 +97,7 @@ final class AnalyticsAgent: AnalyticsAgentProtocol {
             return nil
         }
     }
-    
+
     func getFlags() async -> [SideKit.FeatureFlag]? {
         guard let url = URL(string: api + "v1/flags") else { return nil }
 

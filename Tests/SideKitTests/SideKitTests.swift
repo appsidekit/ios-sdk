@@ -7,10 +7,10 @@ import Testing
 import Foundation
 @testable import SideKit
 
-// MARK: - Mock Analytics Agent
+// MARK: - Mock Meerkat (API client)
 
 @MainActor
-final class MockAnalyticsAgent: AnalyticsAgentProtocol {
+final class MockMeerkat: MeerkatProtocol {
     var sendSignalCallCount = 0
     var lastSentSignals: [SideKit.Signal]?
     var gateInformationToReturn: GateInformation?
@@ -48,9 +48,36 @@ final class MockSettingsStore: SettingsStoreProtocol {
     var isFirstLaunch: Bool = true
     var cachedGateInformation: GateInformation?
     var cachedFlags: [SideKit.FeatureFlag]?
+    var authSession: SideKit.AuthSession?
 
     init(analyticsEnabled: Bool) {
         self.isAnalyticsEnabled = analyticsEnabled
+    }
+}
+
+// MARK: - Mock Auth Agent
+
+@MainActor
+final class MockAuthAgent: AuthAgentProtocol {
+    var signInResult: SideKit.AuthResult<SideKit.AuthOtpResponse> = .failure(.init(code: "not_set", status: 0))
+    var verifyOtpResult: SideKit.AuthResult<SideKit.AuthVerifyResponse> = .failure(.init(code: "not_set", status: 0))
+    var setHandleResult: SideKit.AuthResult<String> = .failure(.init(code: "not_set", status: 0))
+    var logoutCallCount = 0
+    var lastLogoutToken: String?
+
+    func signIn(channel: SideKit.AuthChannel, identifier: String, inviteCode: String?) async -> SideKit.AuthResult<SideKit.AuthOtpResponse> {
+        signInResult
+    }
+    func verifyOtp(requestId: String, channel: SideKit.AuthChannel, identifier: String, code: String) async -> SideKit.AuthResult<SideKit.AuthVerifyResponse> {
+        verifyOtpResult
+    }
+    func setHandle(token: String, handle: String) async -> SideKit.AuthResult<String> {
+        setHandleResult
+    }
+    func logout(token: String) async -> SideKit.AuthResult<SideKit.EmptyAuthResponse> {
+        logoutCallCount += 1
+        lastLogoutToken = token
+        return .success(SideKit.EmptyAuthResponse())
     }
 }
 
@@ -62,9 +89,9 @@ struct SideKitAnalyticsTests {
     @Test("Signal is sent when analytics is enabled")
     @MainActor
     func signalSentWhenAnalyticsEnabled() async {
-        let mockAgent = MockAnalyticsAgent()
+        let mockAgent = MockMeerkat()
         let mockSettings = MockSettingsStore(analyticsEnabled: true)
-        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+        let sideKit = SideKit(settings: mockSettings, meerkat: mockAgent)
 
         sideKit.sendSignal(key: "test_event", value: "test_value")
 
@@ -75,9 +102,9 @@ struct SideKitAnalyticsTests {
     @Test("Signal is NOT sent when analytics is disabled")
     @MainActor
     func signalNotSentWhenAnalyticsDisabled() async {
-        let mockAgent = MockAnalyticsAgent()
+        let mockAgent = MockMeerkat()
         let mockSettings = MockSettingsStore(analyticsEnabled: false)
-        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+        let sideKit = SideKit(settings: mockSettings, meerkat: mockAgent)
 
         sideKit.sendSignal(key: "test_event", value: "test_value")
 
@@ -88,9 +115,9 @@ struct SideKitAnalyticsTests {
     @Test("Signal respects analytics toggle change")
     @MainActor
     func signalRespectsAnalyticsToggle() async {
-        let mockAgent = MockAnalyticsAgent()
+        let mockAgent = MockMeerkat()
         let mockSettings = MockSettingsStore(analyticsEnabled: true)
-        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+        let sideKit = SideKit(settings: mockSettings, meerkat: mockAgent)
 
         // First signal with analytics enabled
         sideKit.sendSignal("event1")
@@ -338,12 +365,12 @@ struct CacheValidationTests {
     @Test("API failure with no cache returns nil (not blocked)")
     @MainActor
     func apiFailureNoCacheReturnsNil() async {
-        let mockAgent = MockAnalyticsAgent()
+        let mockAgent = MockMeerkat()
         mockAgent.gateInformationToReturn = nil // Simulate API failure
         let mockSettings = MockSettingsStore(analyticsEnabled: true)
         mockSettings.cachedGateInformation = nil // No cache
 
-        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+        let sideKit = SideKit(settings: mockSettings, meerkat: mockAgent)
 
         // Without gate info, user is not blocked
         #expect(sideKit.gateInformation == nil)
@@ -362,7 +389,7 @@ struct CacheValidationTests {
             cachedForAppVersion: "1.0.0" // Matches mock current version
         )
 
-        let mockAgent = MockAnalyticsAgent()
+        let mockAgent = MockMeerkat()
         mockAgent.gateInformationToReturn = nil // API failure
         let mockSettings = MockSettingsStore(analyticsEnabled: true)
         mockSettings.cachedGateInformation = cachedGateInfo
@@ -400,13 +427,13 @@ struct FeatureFlagTests {
     @Test("flag() returns boolean value for boolean flags")
     @MainActor
     func flagReturnsBoolValue() async {
-        let mockAgent = MockAnalyticsAgent()
+        let mockAgent = MockMeerkat()
         mockAgent.flagsToReturn = [
             SideKit.FeatureFlag(key: "dark_mode", value: .bool(true), isFlag: true, updatedAt: "2026-01-01T00:00:00Z"),
             SideKit.FeatureFlag(key: "beta_feature", value: .bool(false), isFlag: true, updatedAt: "2026-01-01T00:00:00Z"),
         ]
         let mockSettings = MockSettingsStore(analyticsEnabled: true)
-        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+        let sideKit = SideKit(settings: mockSettings, meerkat: mockAgent)
 
         await sideKit.refreshFlags()
 
@@ -417,10 +444,10 @@ struct FeatureFlagTests {
     @Test("flag() returns default when key not found")
     @MainActor
     func flagReturnsDefaultWhenMissing() async {
-        let mockAgent = MockAnalyticsAgent()
+        let mockAgent = MockMeerkat()
         mockAgent.flagsToReturn = []
         let mockSettings = MockSettingsStore(analyticsEnabled: true)
-        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+        let sideKit = SideKit(settings: mockSettings, meerkat: mockAgent)
 
         await sideKit.refreshFlags()
 
@@ -431,12 +458,12 @@ struct FeatureFlagTests {
     @Test("config() returns string value for config entries")
     @MainActor
     func configReturnsStringValue() async {
-        let mockAgent = MockAnalyticsAgent()
+        let mockAgent = MockMeerkat()
         mockAgent.flagsToReturn = [
             SideKit.FeatureFlag(key: "api_url", value: .string("https://example.com"), isFlag: false, updatedAt: "2026-01-01T00:00:00Z"),
         ]
         let mockSettings = MockSettingsStore(analyticsEnabled: true)
-        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+        let sideKit = SideKit(settings: mockSettings, meerkat: mockAgent)
 
         await sideKit.refreshFlags()
 
@@ -446,10 +473,10 @@ struct FeatureFlagTests {
     @Test("config() returns default when key not found")
     @MainActor
     func configReturnsDefaultWhenMissing() async {
-        let mockAgent = MockAnalyticsAgent()
+        let mockAgent = MockMeerkat()
         mockAgent.flagsToReturn = []
         let mockSettings = MockSettingsStore(analyticsEnabled: true)
-        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+        let sideKit = SideKit(settings: mockSettings, meerkat: mockAgent)
 
         await sideKit.refreshFlags()
 
@@ -460,13 +487,13 @@ struct FeatureFlagTests {
     @Test("refreshFlags caches flags to settings")
     @MainActor
     func refreshFlagsCachesToSettings() async {
-        let mockAgent = MockAnalyticsAgent()
+        let mockAgent = MockMeerkat()
         let testFlags = [
             SideKit.FeatureFlag(key: "cached_flag", value: .bool(true), isFlag: true, updatedAt: "2026-01-01T00:00:00Z"),
         ]
         mockAgent.flagsToReturn = testFlags
         let mockSettings = MockSettingsStore(analyticsEnabled: true)
-        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+        let sideKit = SideKit(settings: mockSettings, meerkat: mockAgent)
 
         await sideKit.refreshFlags()
 
@@ -476,14 +503,14 @@ struct FeatureFlagTests {
     @Test("refreshFlags falls back to cache when API fails")
     @MainActor
     func refreshFlagsFallsBackToCache() async {
-        let mockAgent = MockAnalyticsAgent()
+        let mockAgent = MockMeerkat()
         mockAgent.flagsToReturn = nil // Simulate API failure
         let cachedFlags = [
             SideKit.FeatureFlag(key: "cached_flag", value: .bool(true), isFlag: true, updatedAt: "2026-01-01T00:00:00Z"),
         ]
         let mockSettings = MockSettingsStore(analyticsEnabled: true)
         mockSettings.cachedFlags = cachedFlags
-        let sideKit = SideKit(settings: mockSettings, analyticsAgent: mockAgent)
+        let sideKit = SideKit(settings: mockSettings, meerkat: mockAgent)
 
         await sideKit.refreshFlags()
 
@@ -517,5 +544,138 @@ struct FeatureFlagTests {
         #expect(SideKit.FeatureFlagValue.bool(true) != SideKit.FeatureFlagValue.bool(false))
         #expect(SideKit.FeatureFlagValue.string("a") == SideKit.FeatureFlagValue.string("a"))
         #expect(SideKit.FeatureFlagValue.string("a") != SideKit.FeatureFlagValue.bool(true))
+    }
+}
+
+// MARK: - Auth Tests
+
+@Suite("Auth Tests")
+struct AuthTests {
+
+    private static let farFuture = Int(Date().timeIntervalSince1970) + 3600
+
+    @Test("Starts signed out")
+    @MainActor
+    func startsSignedOut() {
+        let sideKit = SideKit(settings: MockSettingsStore(analyticsEnabled: true), authAgent: MockAuthAgent())
+        #expect(sideKit.isAuthenticated == false)
+        #expect(sideKit.authUser == nil)
+        #expect(sideKit.sessionToken == nil)
+    }
+
+    @Test("verifyOtp persists the session and signs the user in")
+    @MainActor
+    func verifyOtpSignsIn() async {
+        let user = SideKit.AuthUser(id: "u_1", handle: nil, createdAt: 100)
+        let authAgent = MockAuthAgent()
+        authAgent.verifyOtpResult = .success(.init(sessionToken: "tok_1", expiresAt: Self.farFuture, user: user, newUser: true))
+        let settings = MockSettingsStore(analyticsEnabled: true)
+        let sideKit = SideKit(settings: settings, authAgent: authAgent)
+
+        let result = await sideKit.verifyOtp(requestId: "r_1", identifier: "+15555550100", code: "123456")
+
+        #expect(result.value?.user == user)
+        #expect(result.value?.isNewUser == true)
+        #expect(sideKit.isAuthenticated == true)
+        #expect(sideKit.sessionToken == "tok_1")
+        #expect(settings.authSession?.token == "tok_1")
+    }
+
+    @Test("verifyOtp surfaces the API error code on failure")
+    @MainActor
+    func verifyOtpSurfacesError() async {
+        let authAgent = MockAuthAgent()
+        authAgent.verifyOtpResult = .failure(.init(code: "invalid_code", status: 400))
+        let sideKit = SideKit(settings: MockSettingsStore(analyticsEnabled: true), authAgent: authAgent)
+
+        let result = await sideKit.verifyOtp(requestId: "r_1", identifier: "+15555550100", code: "000000")
+
+        #expect(result.error?.code == "invalid_code")
+        #expect(sideKit.isAuthenticated == false)
+    }
+
+    @Test("setHandle updates the local user on success")
+    @MainActor
+    func setHandleUpdatesUser() async {
+        let user = SideKit.AuthUser(id: "u_1", handle: nil, createdAt: 100)
+        let authAgent = MockAuthAgent()
+        authAgent.verifyOtpResult = .success(.init(sessionToken: "tok_1", expiresAt: Self.farFuture, user: user, newUser: true))
+        authAgent.setHandleResult = .success("coolhandle")
+        let sideKit = SideKit(settings: MockSettingsStore(analyticsEnabled: true), authAgent: authAgent)
+        _ = await sideKit.verifyOtp(requestId: "r_1", identifier: "+15555550100", code: "123456")
+
+        let result = await sideKit.setHandle("coolhandle")
+
+        #expect(result.value == "coolhandle")
+        #expect(sideKit.authUser?.handle == "coolhandle")
+    }
+
+    @Test("setHandle returns unauthorized when signed out")
+    @MainActor
+    func setHandleUnauthorizedWhenSignedOut() async {
+        let sideKit = SideKit(settings: MockSettingsStore(analyticsEnabled: true), authAgent: MockAuthAgent())
+        let result = await sideKit.setHandle("nope")
+        #expect(result.error?.code == "unauthorized")
+    }
+
+    @Test("logout clears local state even though revoke is best-effort")
+    @MainActor
+    func logoutClearsState() async {
+        let user = SideKit.AuthUser(id: "u_1", handle: nil, createdAt: 100)
+        let authAgent = MockAuthAgent()
+        authAgent.verifyOtpResult = .success(.init(sessionToken: "tok_1", expiresAt: Self.farFuture, user: user, newUser: true))
+        let settings = MockSettingsStore(analyticsEnabled: true)
+        let sideKit = SideKit(settings: settings, authAgent: authAgent)
+        _ = await sideKit.verifyOtp(requestId: "r_1", identifier: "+15555550100", code: "123456")
+
+        await sideKit.logout()
+
+        #expect(authAgent.logoutCallCount == 1)
+        #expect(authAgent.lastLogoutToken == "tok_1")
+        #expect(sideKit.isAuthenticated == false)
+        #expect(sideKit.authUser == nil)
+        #expect(settings.authSession == nil)
+    }
+
+    @Test("Expired stored session is dropped on init")
+    @MainActor
+    func expiredSessionDropped() {
+        let settings = MockSettingsStore(analyticsEnabled: true)
+        let user = SideKit.AuthUser(id: "u_1", handle: "h", createdAt: 100)
+        settings.authSession = SideKit.AuthSession(token: "tok_old", user: user, expiresAt: 1)
+
+        let sideKit = SideKit(settings: settings, authAgent: MockAuthAgent())
+
+        #expect(sideKit.isAuthenticated == false)
+        #expect(settings.authSession == nil)
+    }
+
+    @Test("Valid stored session is restored on init")
+    @MainActor
+    func validSessionRestored() {
+        let settings = MockSettingsStore(analyticsEnabled: true)
+        let user = SideKit.AuthUser(id: "u_1", handle: "h", createdAt: 100)
+        settings.authSession = SideKit.AuthSession(token: "tok_live", user: user, expiresAt: Self.farFuture)
+
+        let sideKit = SideKit(settings: settings, authAgent: MockAuthAgent())
+
+        #expect(sideKit.isAuthenticated == true)
+        #expect(sideKit.sessionToken == "tok_live")
+        #expect(sideKit.authUser == user)
+    }
+
+    @Test("Feedback defaults endUserId to the signed-in user")
+    @MainActor
+    func feedbackDefaultsToSignedInUser() async {
+        let user = SideKit.AuthUser(id: "u_42", handle: nil, createdAt: 100)
+        let authAgent = MockAuthAgent()
+        authAgent.verifyOtpResult = .success(.init(sessionToken: "tok_1", expiresAt: Self.farFuture, user: user, newUser: true))
+        let meerkat = MockMeerkat()
+        let sideKit = SideKit(settings: MockSettingsStore(analyticsEnabled: true), meerkat: meerkat, authAgent: authAgent)
+        _ = await sideKit.verifyOtp(requestId: "r_1", identifier: "+15555550100", code: "123456")
+
+        sideKit.sendFeedback("Great app")
+
+        #expect(meerkat.lastFeedbackEndUserId == "u_42")
     }
 }

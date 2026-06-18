@@ -34,7 +34,8 @@ public final class SideKit: ObservableObject {
     }
 
     private let settings: SettingsStoreProtocol
-    private var analyticsAgent: AnalyticsAgentProtocol?
+    private var meerkat: MeerkatProtocol?
+    private var authAgent: AuthAgentProtocol?
     
     // Track notification observers to prevent duplicates and allow cleanup
     #if canImport(UIKit)
@@ -55,10 +56,12 @@ public final class SideKit: ObservableObject {
     public static let shared = SideKit()
     
     /// Internal initializer for testing.
-    init(settings: SettingsStoreProtocol = SettingsStore(), analyticsAgent: AnalyticsAgentProtocol? = nil) {
+    init(settings: SettingsStoreProtocol = SettingsStore(), meerkat: MeerkatProtocol? = nil, authAgent: AuthAgentProtocol? = nil) {
         self.settings = settings
-        self.analyticsAgent = analyticsAgent
+        self.meerkat = meerkat
+        self.authAgent = authAgent
         self.isAnalyticsEnabled = settings.isAnalyticsEnabled
+        restoreAuthSession()
     }
     
     /// Entry point for the SDK. Call this as early as possible in your app's lifecycle.
@@ -69,8 +72,12 @@ public final class SideKit: ObservableObject {
     public func configure(apiKey: String, presentationMode: UpdatePresentationMode = .automatic, verbose: Bool = false) async {
         self.presentationMode = presentationMode
         Self.isVerbose = verbose
-        analyticsAgent = AnalyticsAgent(apiKey: apiKey)
-        
+        meerkat = Meerkat(apiKey: apiKey)
+        authAgent = AuthAgent(apiKey: apiKey)
+
+        // Restore a persisted end-user session, dropping it if it has expired.
+        restoreAuthSession()
+
         // Tracking default signals
         if settings.isFirstLaunch {
             sendSignal(DefaultSignals.firstLaunch)
@@ -113,7 +120,7 @@ public final class SideKit: ObservableObject {
     /// Fetches gate information from the server or falls back to locally saved settings if the network is unavailable.
     private func fetchGateInformation() async -> GateInformation? {
         // Try to fetch from API first
-        if let gateInfo = await analyticsAgent?.getGateInformation() {
+        if let gateInfo = await meerkat?.getGateInformation() {
             self.gateInformation = gateInfo
             cacheGateInformation(gateInfo)
             return gateInfo
@@ -280,7 +287,7 @@ public final class SideKit: ObservableObject {
 
     /// Fetches the latest flags from the server. Falls back to cached flags on failure.
     public func refreshFlags() async {
-        guard let agent = analyticsAgent else {
+        guard let agent = meerkat else {
             SKLog("Warning: refreshFlags called before configure(). Call configure(apiKey:) first.")
             return
         }
@@ -316,7 +323,7 @@ public final class SideKit: ObservableObject {
     public func sendSignal(_ signals: [Signal]) {
         guard isAnalyticsEnabled else { return }
 
-        guard let agent = analyticsAgent else {
+        guard let agent = meerkat else {
             SKLog("Warning: sendSignal called before configure(). Call configure(apiKey:) first.")
             return
         }
@@ -325,21 +332,126 @@ public final class SideKit: ObservableObject {
 
     // MARK: - Feedback
 
-    /// Send user feedback. Device metadata is collected automatically.
+    /// Send user feedback. Device metadata is collected automatically. When signed in,
+    /// feedback is attributed to the current user unless you pass an explicit `endUserId`.
     /// - Parameters:
     ///   - feedbackText: The feedback content (required).
-    ///   - endUserId: An optional identifier for the end user.
+    ///   - endUserId: An optional identifier for the end user. Defaults to the signed-in user.
     ///   - userAttributes: Optional key-value attributes about the user.
     public func sendFeedback(
         _ feedbackText: String,
         endUserId: String? = nil,
         userAttributes: [String: String]? = nil
     ) {
-        guard let agent = analyticsAgent else {
+        guard let agent = meerkat else {
             SKLog("Warning: sendFeedback called before configure(). Call configure(apiKey:) first.")
             return
         }
-        agent.sendFeedback(feedbackText: feedbackText, endUserId: endUserId, userAttributes: userAttributes)
+        let resolvedUserId = endUserId ?? authUser?.id
+        agent.sendFeedback(feedbackText: feedbackText, endUserId: resolvedUserId, userAttributes: userAttributes)
+    }
+
+    // MARK: - Auth
+
+    /// The currently signed-in end user, or `nil` when signed out.
+    @Published public private(set) var authUser: AuthUser?
+
+    private var sessionExpiresAt: Int?
+
+    /// `true` when an end user is signed in (and the session hasn't expired).
+    public var isAuthenticated: Bool { sessionToken != nil }
+
+    /// The opaque session token for the signed-in user, or `nil`. Send this to your own
+    /// backend (e.g. as a Bearer header) and verify it via `/v1/auth/introspect`. Treat it
+    /// as a credential.
+    public private(set) var sessionToken: String?
+
+    /// Start signing a user in: send a one-time passcode to an identifier on the given
+    /// channel, then complete with `verifyOtp`. This is passwordless, so the same call
+    /// signs up a new user and signs in an existing one. Defaults to `.phone` (E.164,
+    /// e.g. "+15555550100"); pass `.email` for an email address. Returns the requestId to
+    /// pass to `verifyOtp`, or an error (`rate_limited`, etc.).
+    public func signIn(_ identifier: String, channel: AuthChannel = .phone, inviteCode: String? = nil) async -> AuthResult<AuthOtpResponse> {
+        guard let authAgent else {
+            return .failure(.init(code: "not_configured", status: 0))
+        }
+        return await authAgent.signIn(channel: channel, identifier: identifier, inviteCode: inviteCode)
+    }
+
+    /// Verify an OTP code. Pass the same `identifier`/`channel` used in `signIn`. On
+    /// success the session and user are persisted and a ``SignInResult`` (the signed-in
+    /// user plus `isNewUser`) is returned. Returns `invalid_code` on a bad code.
+    public func verifyOtp(requestId: String, identifier: String, channel: AuthChannel = .phone, code: String) async -> AuthResult<SignInResult> {
+        guard let authAgent else {
+            return .failure(.init(code: "not_configured", status: 0))
+        }
+        let result = await authAgent.verifyOtp(requestId: requestId, channel: channel, identifier: identifier, code: code)
+        switch result {
+        case .success(let verified):
+            applyAuthSession(token: verified.sessionToken, user: verified.user, expiresAt: verified.expiresAt)
+            SKLog("Signed in as \(verified.user.id) (newUser: \(verified.newUser))")
+            return .success(SignInResult(user: verified.user, isNewUser: verified.newUser))
+        case .failure(let err):
+            return .failure(err)
+        }
+    }
+
+    /// Set the signed-in user's handle. Returns `handle_taken` (409) on conflict,
+    /// `unauthorized` if signed out.
+    public func setHandle(_ handle: String) async -> AuthResult<String> {
+        guard let authAgent else {
+            return .failure(.init(code: "not_configured", status: 0))
+        }
+        guard let token = sessionToken else {
+            return .failure(.init(code: "unauthorized", status: 401))
+        }
+        let result = await authAgent.setHandle(token: token, handle: handle)
+        if case .success(let newHandle) = result, let user = authUser {
+            authUser = AuthUser(id: user.id, handle: newHandle, createdAt: user.createdAt)
+            persistCurrentSession()
+        }
+        return result
+    }
+
+    /// Sign out. Revokes the session server-side (best-effort) and always clears local auth
+    /// state — a network failure still signs the user out locally.
+    public func logout() async {
+        if let token = sessionToken, let authAgent {
+            _ = await authAgent.logout(token: token) // best-effort; revoke is idempotent
+        }
+        authUser = nil
+        sessionToken = nil
+        sessionExpiresAt = nil
+        settings.authSession = nil
+        SKLog("Signed out")
+    }
+
+    /// Restore a persisted session, dropping it if it has expired.
+    private func restoreAuthSession() {
+        guard let session = settings.authSession else { return }
+        if session.expiresAt <= Int(Date().timeIntervalSince1970) {
+            SKLog("Stored session expired, clearing")
+            settings.authSession = nil
+            return
+        }
+        sessionToken = session.token
+        authUser = session.user
+        sessionExpiresAt = session.expiresAt
+        SKLog("Restored session for \(session.user.id)")
+    }
+
+    /// Set the in-memory session and persist it.
+    private func applyAuthSession(token: String, user: AuthUser, expiresAt: Int) {
+        sessionToken = token
+        authUser = user
+        sessionExpiresAt = expiresAt
+        settings.authSession = AuthSession(token: token, user: user, expiresAt: expiresAt)
+    }
+
+    /// Re-persist the current session (e.g. after the handle changes).
+    private func persistCurrentSession() {
+        guard let token = sessionToken, let user = authUser, let expiresAt = sessionExpiresAt else { return }
+        settings.authSession = AuthSession(token: token, user: user, expiresAt: expiresAt)
     }
 
 }
