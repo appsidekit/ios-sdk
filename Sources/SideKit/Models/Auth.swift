@@ -9,9 +9,9 @@ import Foundation
 
 extension SideKit {
 
-    /// The channel an OTP identifier is delivered over. `phone` (Twilio SMS) is the
-    /// only signup/login channel today; `email` is reserved for apps that make email
-    /// their primary channel, and for adding a secondary channel to an existing account.
+    /// The channel an OTP identifier is delivered over. `phone` (SMS) is the only
+    /// signup/login channel today; `email` is reserved for apps that make email their
+    /// primary channel, and for adding a secondary channel to an existing account.
     public enum AuthChannel: String, Codable, Sendable {
         case phone
         case email
