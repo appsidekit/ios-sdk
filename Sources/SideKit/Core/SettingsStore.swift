@@ -21,7 +21,13 @@ final class SettingsStore: SettingsStoreProtocol {
         static let firstLaunch = "sk_first_launch"
         static let cachedGateInformation = "sk_cached_gate_information"
         static let cachedFlags = "sk_cached_flags"
-        static let authSession = "sk_auth_session"
+    }
+
+    // The session token is a bearer credential, so it lives in the Keychain,
+    // not UserDefaults. Generic-password item scoped to this app.
+    private enum AuthKeychain {
+        static let service = "com.appsidekit.sdk.auth"
+        static let account = "session"
     }
 
     private let defaults: UserDefaults
@@ -82,7 +88,7 @@ final class SettingsStore: SettingsStoreProtocol {
 
     var authSession: SideKit.AuthSession? {
         get {
-            guard let data = defaults.data(forKey: Keys.authSession),
+            guard let data = Keychain.get(service: AuthKeychain.service, account: AuthKeychain.account),
                   let session = try? JSONDecoder().decode(SideKit.AuthSession.self, from: data) else {
                 return nil
             }
@@ -91,9 +97,9 @@ final class SettingsStore: SettingsStoreProtocol {
         set {
             if let session = newValue,
                let data = try? JSONEncoder().encode(session) {
-                defaults.set(data, forKey: Keys.authSession)
+                Keychain.set(data, service: AuthKeychain.service, account: AuthKeychain.account)
             } else {
-                defaults.removeObject(forKey: Keys.authSession)
+                Keychain.delete(service: AuthKeychain.service, account: AuthKeychain.account)
             }
         }
     }

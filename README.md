@@ -13,7 +13,7 @@ SideKit is a lightweight iOS SDK that provides seamless version gating and analy
 
 - **Version Gating**: Remotely force updates or suggest new versions to your users.
 - **Analytics Signals**: Send custom events (signals) to track user behavior and app health.
-- **Phone Auth**: Sign end users in with phone + OTP; the session is persisted across launches.
+- **Phone Auth** (alpha): Sign end users in with phone + OTP; the session is persisted across launches.
 - **Automatic Presentation**: Out-of-the-box UI for update prompts that works with both SwiftUI and UIKit.
 - **Lightweight**: Zero external dependencies and a tiny footprint.
 
